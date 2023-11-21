@@ -1,6 +1,7 @@
 /* GPLv2 (c) Airbus */
 #include <debug.h>
 #include <info.h>
+/*Test*/
 
 extern info_t   *info;
 extern uint32_t __kernel_start__;
