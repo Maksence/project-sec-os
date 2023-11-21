@@ -1,0 +1,61 @@
+# Q1: this gdb script aims at verifying that the idt address
+# found by the tp() code is correct, and for that purpose, it
+# dereferences this address and print the content entry by entry
+
+# attach the debugger to the target
+target remote :1234
+
+# set a breakpoint after having read the idt value
+# for example before the kernel enters in the "panic" function
+hb panic
+
+# execute the target
+c
+
+# when the breakpoint is hit
+## init some variables
+set $idt=IDT
+print $idt
+set $i=0
+set $idt_sz=255
+
+## print the idt content (entries values as raw)
+while $i<$idt_sz
+	print ((raw64_t*)($idt))[$i++].raw
+end
+
+## print an example of isr, for example for the entry 0
+print ((int_desc_t*)($idt))[0]
+set $isr_0 = (((int_desc_t*)($idt))[0].offset_2 << 16) | ((int_desc_t*)($idt))[0].offset_1
+x/4i $isr_0
+
+
+# detach to let the kernel be executed and quit gdb
+detach
+quit
+
+# output result:
+# $1   = 0x308e0000082010
+# $2   = 0x308e0000082020
+# $3   = 0x308e0000082030
+# $4   = 0x308e0000082040
+# ...
+# $254 = 0x308e0000082fe0
+# $255 = 0x308e0000082ff0
+# {
+#   {
+#     offset_1 = 0x2010,
+#     selector = 0x8,
+#     ist = 0x0,
+#     zero_1 = 0x0,
+#     type = 0xe,
+#     zero_2 = 0x0,
+#     dpl = 0x0,
+#     p = 0x1,
+#     offset_2 = 0x30
+#   }
+# ...
+# 0x302010 <idt_trampoline>:	    push   0xffffffff
+# 0x302012 <idt_trampoline+2>:	push   0x0
+# 0x302014 <idt_trampoline+4>:	jmp    0x303deb <idt_common>
+# 0x302019 <idt_trampoline+9>:	lea    esi,[esi+eiz*1+0x0]

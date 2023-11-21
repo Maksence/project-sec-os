@@ -1,0 +1,57 @@
+# Q3: this gdb script aims at verifying that the idt address
+# found by the tp() code is correct, and that the isr #3 
+# was correctly updated with your bp_handler routine
+
+# attach the debugger to the target
+target remote :1234
+
+# set a breakpoint after having read the idt value
+# for example before the kernel enters in the "panic" function
+hb panic
+
+# execute the target
+c
+
+# when the breakpoint is hit
+## init some variables
+set $idt=IDT
+print $idt
+
+## print an example of isr of entry 3
+print ((int_desc_t*)($idt))[3]
+# Note: possible to get the same result with the following command 
+# print IDT[3]
+# Note end
+
+set $isr_3 = (((int_desc_t*)($idt))[3].offset_2 << 16) | ((int_desc_t*)($idt))[3].offset_1
+x/10i $isr_3
+
+
+# detach to let the kernel be executed and quit gdb
+detach
+quit
+
+# output result:
+# $1 = {
+#   {
+#     offset_1 = 0x3fca,
+#     selector = 0x8,
+#     ist = 0x0,
+#     zero_1 = 0x0,
+#     type = 0xe,
+#     zero_2 = 0x0,
+#     dpl = 0x0,
+#     p = 0x1,
+#     offset_2 = 0x30
+#   }
+# ...
+# 0x303fca <bp_handler>:	push   ebp
+# 0x303fcb <bp_handler+1>:	mov    ebp,esp
+# 0x303fcd <bp_handler+3>:	sub    esp,0x8
+# 0x303fd0 <bp_handler+6>:	sub    esp,0xc
+# 0x303fd3 <bp_handler+9>:	push   0x3048b6
+# 0x303fd8 <bp_handler+14>:	call   0x3030d0 <printf>
+# 0x303fdd <bp_handler+19>:	add    esp,0x10
+# 0x303fe0 <bp_handler+22>:	nop
+# 0x303fe1 <bp_handler+23>:	leave  
+# 0x303fe2 <bp_handler+24>:	ret    

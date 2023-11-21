@@ -1,0 +1,99 @@
+# Q4: this gdb script aims at showing what happends in the stack
+# when developing an exception routine in C
+
+# attach the debugger to the target
+target remote :1234
+
+# set a list of interesting breakpoints
+## bp 1
+hb bp_trigger 
+hb bp_handler
+
+c
+
+# when bp_trigger hit, single step until the int3 instruction
+# and print the stack (int3 encoding: 0xcc)
+set $opc = (uint8_t) *((uint32_t) $eip)
+while ($opc != 0xcc)
+	si
+	set $opc = (uint8_t) *((uint32_t) $eip)
+end
+
+print "-*-*-*-*-*-*-*-*-*-*-* Stack in bp_trigger -- just before int3"
+x/8x $esp
+#info frame
+c
+
+# when bp_handler hit, just after the int3, print the stack
+print "-*-*-*-*-*-*-*-*-*-*-* Stack in bp_handler -- just after int3"
+x/11x $esp
+#info frame
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* Including new info pushed in the stack by the CPU:"
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* Saved EIP (letting CS and EFLAGS on the stack!"
+x/3x $esp
+
+# then single step until reaching "ret" of bp_handler
+# and print the stack (ret opcode: 0xc3)
+set $opc = (uint8_t) *((uint32_t) $eip)
+while ($opc != 0xc3)
+	if ($opc == 0xe8)
+		si
+		fin
+	end
+	if ($opc != 0xe8)
+		si
+	end
+	set $opc = (uint8_t) *((uint32_t) $eip)
+end
+
+print "-*-*-*-*-*-*-*-*-*-*-* Stack in bp_handler -- before executing bp_handler's ret"
+x/11x $esp
+#info frame
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* Info to be poped by the CPU:"
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* saved EIP (letting CS and EFLAGS on the stack!)"
+x/1x $esp
+si
+
+# after execution bp_handler ret, print the stack
+# to see the residual CS and EFLAGS
+print "-*-*-*-*-*-*-*-*-*-*-* Stack in bp_trigger -- just after returning from bp_handler's ret"
+x/10x $esp
+#info frame
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* Info not poped by the CPU:"
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* saved CS and EFLAGS!"
+x/3x $esp
+si
+
+# then single step until reaching "ret" of bp_trigger
+# and print the stack (ret opcode: 0xc3)
+set $opc = (uint8_t) *((uint32_t) $eip)
+while ($opc != 0xc3)
+	if ($opc == 0xe8)
+		si
+		fin
+	end
+	if ($opc != 0xe8)
+		si
+	end
+	set $opc = (uint8_t) *((uint32_t) $eip)
+end
+
+print "-*-*-*-*-*-*-*-*-*-*-* Stack in bp_handler -- before executing bp_handler's ret"
+x/10x $esp
+#info frame
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* Info not poped by the CPU:"
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* saved CS will become the new $ebp, and saved EFLAGS the new EIP!"
+x/2x $esp
+si
+
+print "-*-*-*-*-*-*-*-*-*-*-* Stack in tp -- just after bp_handler's ret"
+x/10x $esp
+#info frame
+print "-*-*-*-*-*-*-*-*-*-*-*-*-* Instead of returning into tp(), it executes code located at the \"CS\" value until encountering an invalid opcode"
+x/10i $eip
+
+# detach to let the kernel be executed and quit gdb
+detach
+quit
+
+
