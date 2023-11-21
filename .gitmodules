@@ -1,0 +1,3 @@
+[submodule "secos-ng"]
+	path = secos-ng
+	url = https://github.com/agantet/secos-ng.git
