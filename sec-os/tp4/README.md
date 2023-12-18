@@ -49,7 +49,7 @@ des espaces d'adressage.
 **Q5\* : Le but va être maintenant d'initialiser la mémoire virtuelle
   en "identity mapping" : les adresses virtuelles doivent être identiques aux
   adresses physiques. Pour cela :**
-
+  
 * **Bien étudier les plages d'adresses physiques occupées par le noyau
      (`readelf -e kernel.elf`, regarder les program headers).**
 * **Préparer au moins une entrée dans le PGD pour la PTB.**

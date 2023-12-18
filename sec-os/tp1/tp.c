@@ -153,7 +153,7 @@ void tp() {
     // end Q10
 
     // Q11
-    // _memcpy8(dst, src, 64);
+    //_memcpy8(dst, src, 64);
     // end Q11
 
     // Q12
@@ -187,6 +187,7 @@ void tp() {
 
     // Q13
     // DS/ES/FS/GS
+    debug("Q13 CHARGEMENT DS ES FS GS\n");
     set_ds(gdt_usr_seg_sel(5));
     set_es(gdt_usr_seg_sel(5));
     set_fs(gdt_usr_seg_sel(5));
@@ -199,8 +200,8 @@ void tp() {
     tss_dsc(&my_gdt[6], (offset_t)&TSS);
     set_tr(gdt_krn_seg_sel(6));
     // CS via farjump
-    // fptr32_t fptr = {.segment = gdt_usr_seg_sel(5), .offset = (uint32_t)userland}; 
-    // farjump(fptr);  // plante, #GP
+    //fptr32_t fptr = {.segment = gdt_usr_seg_sel(5), .offset = (uint32_t)userland}; 
+    //farjump(fptr);  // plante, #GP
     // interdit, un moyen de démarrer une tâche ring 3 depuis le ring 0 est 
     // de détourner l'usage principal de iret pour profiter du changement 
     // de contexte que le CPU sait effectuer à ce moment-là... cf. TP3 pour l'implem.

@@ -156,7 +156,7 @@ par exemple mettre à jour le registre de contrôle CR0 :
 
 **Que se passe-t-il ? Comment un noyau pourrait-il faire autrement pour démarrer une tâche en ring 3 ?**
 
-Cette méthode sera abordée et à implémenter en fin de tp suivant.
+Cette méthode sera abordée et à implémenter en fin de tp suivant. 
 
 ## QEMU again
 
