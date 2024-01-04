@@ -6,14 +6,23 @@
 /*| 0x10 0000  | Multiboot Header     |
 | 0x10 0010   |   Kernel stack    |
 | 0x10 2010      | Kernel        |*/
-
+ 
 
 #define KERNEL_STACK_START 0x100010
 #define KERNEL_STACK_SIZE 0x2000
 #define KERNEL_START 0x102010
 #define GDT_ENTRY_COUNT 5
-#define TYPE_DATA_RW 3
-#define TYPE_CODE_RX 11
+
+#define RING0_CODE  1
+#define RING0_DATA  2
+#define RING3_CODE  3
+#define RING3_DATA  4
+#define TSS_IDX  5
+
+//#define TYPE_DATA_RW SEG_DESC_DATA_RW
+//SEG_DESC_DATA_RW
+//#define TYPE_CODE_RX SEG_DESC_DATA_RX
+//SEG_DESC_CODE_XR
 #define FLAG_SEGMENT_PRESENT 1
 #define FLAG_DEFAULT_AVL 1
 #define FLAG_DEFAULT_LONGMODE 0
@@ -23,9 +32,15 @@
 #define FLAG_PRIVILEGE_R0 0
 #define FLAG_PRIVILEGE_R3 3
 
+
+seg_desc_t my_gdt[GDT_ENTRY_COUNT];
+gdt_reg_t my_gdtr;
+tss_t      TSS;
+
 void userland() {
     //Fonction test pour vérifier que le passage en mode userland fonctionne
-   asm volatile ("mov %eax, %cr0");
+    asm volatile ("mov %eax, %cr0");
+
 }
 
 /*** Pour l'instant, les fonctions sont prises des corrections du tp
@@ -53,6 +68,16 @@ Quels bases et limites donner à ces segments ?
     (_entry)->p = 1;                       \
   }
 
+#define tss_dsc(_dSc_,_tSs_)                                            \
+   ({                                                                   \
+      raw32_t addr    = {.raw = _tSs_};                                 \
+      (_dSc_)->raw    = sizeof(tss_t);                                  \
+      (_dSc_)->base_1 = addr.wlow;                                      \
+      (_dSc_)->base_2 = addr._whigh.blow;                               \
+      (_dSc_)->base_3 = addr._whigh.bhigh;                              \
+      (_dSc_)->type   = SEG_DESC_SYS_TSS_AVL_32;                        \
+      (_dSc_)->p      = 1;                                              \
+   })
 
 void init_segment(seg_desc_t* seg, uint32_t base, uint32_t limit, uint8_t type, uint8_t s, uint8_t dpl, uint8_t p, uint8_t avl, uint8_t l, uint8_t d, uint8_t g) {
     seg->base_1 = base & 0xFFFF;
@@ -68,12 +93,19 @@ void init_segment(seg_desc_t* seg, uint32_t base, uint32_t limit, uint8_t type, 
     seg->l = l;
     seg->d = d;
     seg->g = g;
-
 }
 
-void init_gdt(gdt_reg_t* gdtr, seg_desc_t* gdt, uint16_t size) {
-    gdtr->addr = (uint32_t)gdt;
-    gdtr->limit = size - 1;
+
+
+void print_selectors(){
+    uint16_t ds = get_ds();
+	uint16_t es = get_es();
+	uint16_t fs = get_fs();
+	uint16_t gs = get_gs();
+	debug("ds: 0x%x ", ds);
+	debug("es: 0x%x ", es);
+	debug("fs: 0x%x ", fs);
+	debug("gs: 0x%x ", gs);
 }
 
 void print_gdt_content(gdt_reg_t gdtr_ptr) {
@@ -105,133 +137,97 @@ void print_gdt_content(gdt_reg_t gdtr_ptr) {
     }
 }
 
-void tp() {
-    gdt_reg_t gdtr_ptr;
-    get_gdtr(gdtr_ptr);
-	/*
-	debug("GDT DE BASE \n");
-    debug("GDT addr:  0x%x ", (unsigned int) gdtr_ptr.addr);
-    debug("limit: %d\n", gdtr_ptr.limit);
-    // res Q1
-    // GDT addr:  0x8f8c limit: 39
-    // end Q1
-	*/
-    // Q2 
-    //print_gdt_content(gdtr_ptr);
-    seg_desc_t my_gdt[GDT_ENTRY_COUNT];
-
-    // Initialize GDT segments for kernel code and data segments in flatmode
-    init_segment(&my_gdt[1], 0x0000, 0xffff, TYPE_CODE_RX, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R0, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
-    init_segment(&my_gdt[2], 0x0000, 0xffff, TYPE_DATA_RW, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R0, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
-    // Initialize GDT segments for user code and data segments in flatmode
-    init_segment(&my_gdt[3], 0x00, 0xffff, TYPE_CODE_RX, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R3, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
-    init_segment(&my_gdt[4], 0x00, 0xffff, TYPE_DATA_RW, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R3, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
-    // end Q5
-	// TODO
-    gdt_reg_t my_gdtr;
-    my_gdtr.addr = (long unsigned int)my_gdt;
-    my_gdtr.limit = sizeof(my_gdt) - 1;
-    set_gdtr(my_gdtr);
-    // TODO
-    // end Q6
-
-    // Q7
-
-    get_gdtr(my_gdtr);
-    debug("GDT addr:  0x%x ", (unsigned int) my_gdtr.addr);
-    debug("limit: %d\n", my_gdtr.limit);
-    print_gdt_content(my_gdtr);
-	/**
-	uint16_t ds = get_ds();
-	uint16_t es = get_es();
-	uint16_t fs = get_fs();
-	uint16_t gs = get_gs();
-	debug("ds: 0x%x ", ds);
-	debug("es: 0x%x ", es);
-	debug("fs: 0x%x ", fs);
-	debug("gs: 0x%x ", gs);
-	*/
-}
-
-/*Cette fonction est inutile mais me sert de référence si j'ai besoin de revoir rapidement les flags*/
-void donothing() {
-	// Q1
-    // GDTR and GDT configured by GRUB
-    gdt_reg_t gdtr_ptr;
-    get_gdtr(gdtr_ptr);
-    debug("GDT addr:  0x%x ", (unsigned int) gdtr_ptr.addr);
-    debug("limit: %d\n", gdtr_ptr.limit);
-    // res Q1
-    // GDT addr:  0x8f8c limit: 39
-    // end Q1
-
-    // Q2 
-    print_gdt_content(gdtr_ptr);
-	debug("LIMITE \n");
-	debug("limit: %d\n", gdtr_ptr.limit);
-	debug("limit: %d\n", gdtr_ptr.limit);
-	debug("limit: %d\n", gdtr_ptr.limit);
-    // res Q2
-    /*
-    0 [0x0 - 0xfff0] seg_t: 00000000000000000000000000000000 desc_t: 0 priv: 0 present: 0 avl: 0 longmode: 0 default: 0 gran: 0 
-    1 [0x0 - 0xffffffff] seg_t: 00000000000000000000000000001011 desc_t: 1 priv: 0 present: 1 avl: 0 longmode: 0 default: 1 gran: 1 
-    2 [0x0 - 0xffffffff] seg_t: 00000000000000000000000000000011 desc_t: 1 priv: 0 present: 1 avl: 0 longmode: 0 default: 1 gran: 1 
-    3 [0x0 - 0xffff] seg_t: 00000000000000000000000000001111 desc_t: 1 priv: 0 present: 1 avl: 0 longmode: 0 default: 0 gran: 0 
-    4 [0x0 - 0xffff] seg_t: 00000000000000000000000000000011 desc_t: 1 priv: 0 present: 1 avl: 0 longmode: 0 default: 0 gran: 0 
-    -----------------------------------------------------------------------------------------------
-    */ 
-    //end Q2
-
-
-    // Q4 
-    // ségrégation de grub en mode flat...
-    // end Q4
-
-    // Q5
-    seg_desc_t my_gdt[7];
+void init_gdt_segs(){
+    // Init GDT
+    // First element of the GDT is always empty
     my_gdt[0].raw = 0ULL;
-    my_gdt[1].limit_1 = 0xffff;   //:16;     /* bits 00-15 of the segment limit */
-    my_gdt[1].base_1 = 0x0000;    //:16;     /* bits 00-15 of the base address */
-    my_gdt[1].base_2 = 0x00;      //:8;      /* bits 16-23 of the base address */
-    my_gdt[1].type = 11;//Code,RX //:4;      /* segment type */
-    my_gdt[1].s = 1;              //:1;      /* descriptor type */
-    my_gdt[1].dpl = 0; //ring0    //:2;      /* descriptor privilege level */
-    my_gdt[1].p = 1;              //:1;      /* segment present flag */
-    my_gdt[1].limit_2 = 0xf;      //:4;      /* bits 16-19 of the segment limit */
-    my_gdt[1].avl = 1;            //:1;      /* available for fun and profit */
-    my_gdt[1].l = 0; //32bits     //:1;      /* longmode */
-    my_gdt[1].d = 1;              //:1;      /* default length, depend on seg type */
-    my_gdt[1].g = 1;              //:1;      /* granularity */
-    my_gdt[1].base_3 = 0x00;      //:8;      /* bits 24-31 of the base address */
-    my_gdt[2].limit_1 = 0xffff;   //:16;     /* bits 00-15 of the segment limit */
-    my_gdt[2].base_1 = 0x0000;    //:16;     /* bits 00-15 of the base address */
-    my_gdt[2].base_2 = 0x00;      //:8;      /* bits 16-23 of the base address */
-    my_gdt[2].type = 3; //data,RW //:4;      /* segment type */
-    my_gdt[2].s = 1;              //:1;      /* descriptor type */
-    my_gdt[2].dpl = 0; //ring0    //:2;      /* descriptor privilege level */
-    my_gdt[2].p = 1;              //:1;      /* segment present flag */
-    my_gdt[2].limit_2 = 0xf;      //:4;      /* bits 16-19 of the segment limit */
-    my_gdt[2].avl = 1;            //:1;      /* available for fun and profit */
-    my_gdt[2].l = 0; // 32 bits   //:1;      /* longmode */
-    my_gdt[2].d = 1;              //:1;      /* default length, depend on seg type */
-    my_gdt[2].g = 1;              //:1;      /* granularity */
-    my_gdt[2].base_3 = 0x00;      //:8;      /* bits 24-31 of the base address */
-    // end Q5
+    // Initialize GDT segments for kernel code and data segments in flatmode
+    init_segment(&my_gdt[1], 0x0000, 0xffff, SEG_DESC_CODE_XR, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R0, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
+    init_segment(&my_gdt[2], 0x0000, 0xffff, SEG_DESC_DATA_RW, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R0, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
+    // Initialize GDT segments for user code and data segments in flatmode
+    init_segment(&my_gdt[3], 0x00, 0xffff, SEG_DESC_CODE_XR, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R3, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
+    init_segment(&my_gdt[4], 0x00, 0xffff, SEG_DESC_DATA_RW, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R3, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
+   
+	// Load the GDT by changing the adress and limit in gdtr
+    gdt_reg_t my_gdtr;  
 
-    // Q6
-    gdt_reg_t my_gdtr;
     my_gdtr.addr = (long unsigned int)my_gdt;
     my_gdtr.limit = sizeof(my_gdt) - 1;
     set_gdtr(my_gdtr);
-    // TODO
-    // end Q6
-
-    // Q7
+    
+    // Check GDT content    
     get_gdtr(my_gdtr);
     debug("GDT addr:  0x%x ", (unsigned int) my_gdtr.addr);
     debug("limit: %d\n", my_gdtr.limit);
     print_gdt_content(my_gdtr);
-    // end Q7
-
-
+    
+    // Init registers on kernel segments
+    set_cs(gdt_krn_seg_sel(RING0_CODE));
+    set_ss(gdt_krn_seg_sel(RING0_DATA));
+    set_ds(gdt_krn_seg_sel(RING0_DATA));
+    set_es(gdt_krn_seg_sel(RING0_DATA));
+    set_fs(gdt_krn_seg_sel(RING0_DATA));
+    set_gs(gdt_krn_seg_sel(RING0_DATA));
+            
+    print_selectors();
+    debug("\n AAA\n");
+    /*
+    TSS.s0.esp = get_ebp();
+    TSS.s0.ss  = gdt_krn_seg_sel(RING0_DATA);
+    tss_dsc(&my_gdt[TSS_IDX], (offset_t)&TSS);
+    set_tr(gdt_krn_seg_sel(TSS_IDX));
+    */
+	// END INIT GDT
+    
 }
+
+
+#define tss_dsc(_dSc_,_tSs_)                                            \
+   ({                                                                   \
+      raw32_t addr    = {.raw = _tSs_};                                 \
+      (_dSc_)->raw    = sizeof(tss_t);                                  \
+      (_dSc_)->base_1 = addr.wlow;                                      \
+      (_dSc_)->base_2 = addr._whigh.blow;                               \
+      (_dSc_)->base_3 = addr._whigh.bhigh;                              \
+      (_dSc_)->type   = SEG_DESC_SYS_TSS_AVL_32;                        \
+      (_dSc_)->p      = 1;                                              \
+   })
+
+void tp() {
+    init_gdt_segs();
+    debug("\n BBB \n");
+    //Switch to user mode
+    set_ds(gdt_krn_seg_sel(RING3_DATA));
+    set_es(gdt_krn_seg_sel(RING3_DATA));
+    set_fs(gdt_krn_seg_sel(RING3_DATA));
+    set_gs(gdt_krn_seg_sel(RING3_DATA));
+    debug("\n CCC \n");
+
+    TSS.s0.esp = get_ebp();
+    TSS.s0.ss  = gdt_krn_seg_sel(RING0_DATA);
+    tss_dsc(&my_gdt[TSS_IDX], (offset_t)&TSS);
+    debug("\n DDD \n");
+    set_tr(gdt_krn_seg_sel(TSS_IDX));
+    debug("\n TSS setup \n");
+    //print_selectors();
+       
+    asm volatile (
+    "push %0    \n" // ss
+    "push %%ebp \n" // esp
+    "pushf      \n" // eflags
+    "push %1    \n" // cs
+    "push %2    \n" // eip
+    // end Q2
+    // Q3
+    "iret"
+    ::
+        "i"(gdt_krn_seg_sel(RING3_DATA)),
+        "i"(gdt_krn_seg_sel(RING3_CODE)),
+        "r"(&userland)
+    ); 
+
+
+
+    debug("\n >>>>> end of tp <<<<<\n");
+}
+
