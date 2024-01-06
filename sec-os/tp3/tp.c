@@ -71,7 +71,7 @@ void init_gdt() {
 }
 
 void userland() {
-   asm volatile ("mov %eax, %cr0");
+   //asm volatile ("mov %eax, %cr0");
 }
 
 void tp() {
@@ -103,5 +103,4 @@ void tp() {
     "r"(&userland)
    );
    // end Q3
-   
 }

@@ -2,7 +2,8 @@
 #include <debug.h>
 #include <segmem.h>
 #include <string.h>
-
+#include <pagemem.h>
+#include <cr.h>
 /*| 0x10 0000  | Multiboot Header     |
 | 0x10 0010   |   Kernel stack    |
 | 0x10 2010      | Kernel        |*/
@@ -11,7 +12,7 @@
 #define KERNEL_STACK_START 0x100010
 #define KERNEL_STACK_SIZE 0x2000
 #define KERNEL_START 0x102010
-#define GDT_ENTRY_COUNT 5
+#define GDT_ENTRY_COUNT 8
 
 #define RING0_CODE  1
 #define RING0_DATA  2
@@ -38,9 +39,10 @@ gdt_reg_t my_gdtr;
 tss_t      TSS;
 
 void userland() {
+    
     //Fonction test pour vérifier que le passage en mode userland fonctionne
-    asm volatile ("mov %eax, %cr0");
-
+    //asm volatile ("mov %eax, %cr0");
+    debug("\n >>>>> userland <<<<<\n");
 }
 
 /*** Pour l'instant, les fonctions sont prises des corrections du tp
@@ -94,8 +96,6 @@ void init_segment(seg_desc_t* seg, uint32_t base, uint32_t limit, uint8_t type, 
     seg->d = d;
     seg->g = g;
 }
-
-
 
 void print_selectors(){
     uint16_t ds = get_ds();
@@ -170,14 +170,7 @@ void init_gdt_segs(){
     set_gs(gdt_krn_seg_sel(RING0_DATA));
             
     print_selectors();
-    debug("\n AAA\n");
-    /*
-    TSS.s0.esp = get_ebp();
-    TSS.s0.ss  = gdt_krn_seg_sel(RING0_DATA);
-    tss_dsc(&my_gdt[TSS_IDX], (offset_t)&TSS);
-    set_tr(gdt_krn_seg_sel(TSS_IDX));
-    */
-	// END INIT GDT
+
     
 }
 
@@ -193,38 +186,40 @@ void init_gdt_segs(){
       (_dSc_)->p      = 1;                                              \
    })
 
+void setup_memory_pages(pde32_t *pgd, pte32_t *first_ptb, unsigned int flags)
+{
+  memset(pgd, 0, PAGE_SIZE);
+
+  // Setup identity paging (see https://wiki.osdev.org/Identity_Paging)
+  // From 0x00_0000 to 0x7f_ffff, with 2 page directory entries
+  for (int entry = 0; entry <= 1; entry++)
+  {
+    // ptb address = base address + entry num * page size
+    pte32_t *ptb = first_ptb + entry * 4096;
+    for (int i = 0; i < 1024; i++)
+      pg_set_entry(&ptb[i], flags, i + entry * 1024);
+    // Add the page table to the page directory
+    pg_set_entry(&pgd[entry], flags, page_nr(ptb));
+  }
+
+  // Enable paging (see https://wiki.osdev.org/Paging#Enabling)
+  set_cr3(pgd);
+}
+
 void tp() {
     init_gdt_segs();
-    debug("\n BBB \n");
-    //Switch to user mode
+    //Initalize TSS segment
     set_ds(gdt_krn_seg_sel(RING3_DATA));
     set_es(gdt_krn_seg_sel(RING3_DATA));
     set_fs(gdt_krn_seg_sel(RING3_DATA));
     set_gs(gdt_krn_seg_sel(RING3_DATA));
-    debug("\n CCC \n");
-
     TSS.s0.esp = get_ebp();
     TSS.s0.ss  = gdt_krn_seg_sel(RING0_DATA);
     tss_dsc(&my_gdt[TSS_IDX], (offset_t)&TSS);
-    debug("\n DDD \n");
     set_tr(gdt_krn_seg_sel(TSS_IDX));
-    debug("\n TSS setup \n");
+    debug("\n TSS was setup \n");
     //print_selectors();
        
-    asm volatile (
-    "push %0    \n" // ss
-    "push %%ebp \n" // esp
-    "pushf      \n" // eflags
-    "push %1    \n" // cs
-    "push %2    \n" // eip
-    // end Q2
-    // Q3
-    "iret"
-    ::
-        "i"(gdt_krn_seg_sel(RING3_DATA)),
-        "i"(gdt_krn_seg_sel(RING3_CODE)),
-        "r"(&userland)
-    ); 
 
 
 
