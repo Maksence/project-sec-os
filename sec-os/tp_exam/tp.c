@@ -170,8 +170,6 @@ void init_gdt_segs(){
     set_gs(gdt_krn_seg_sel(RING0_DATA));
             
     print_selectors();
-
-    
 }
 
 
@@ -185,6 +183,32 @@ void init_gdt_segs(){
       (_dSc_)->type   = SEG_DESC_SYS_TSS_AVL_32;                        \
       (_dSc_)->p      = 1;                                              \
    })
+
+
+void setup_task_pagination(pde32_t *pgd) 
+{
+  debug("INITIALISATION DE LA PAGINATION\n");
+  memset((void*)pgd, 0, PAGE_SIZE);
+
+  pte32_t *ptb = (pte32_t *)((int)pgd + 0x1000);
+
+  // Initalisation des 1024 entrées de la ptb
+  for (int i = 0; i < 1024; i++) {
+    pg_set_entry(&ptb[i], PG_KRN|PG_RW,  i);
+  }
+  debug("PTB[1] = %d\n", ptb[1].raw);
+  // Initialisation de l'entrée de la pgd
+  pg_set_entry(&pgd[0], PG_KRN|PG_RW, page_nr(ptb));
+  debug("PGD = %p\n", pgd);
+
+  // On met à jour CR3
+  set_cr3((uint32_t)pgd);
+  debug("CR3 = %d\n", get_cr3());
+
+  uint32_t cr0 = get_cr0();
+  set_cr0(cr0|CR0_PG);
+  debug("CR0 = %d\n", get_cr0());
+}
 
 void setup_memory_pages(pde32_t *pgd, pte32_t *first_ptb, unsigned int flags)
 {
@@ -204,6 +228,10 @@ void setup_memory_pages(pde32_t *pgd, pte32_t *first_ptb, unsigned int flags)
 
   // Enable paging (see https://wiki.osdev.org/Paging#Enabling)
   set_cr3(pgd);
+
+  // Activation de la pagination
+  uint32_t cr0 = get_cr0();
+  set_cr0(cr0 | CR0_PG);
 }
 
 void tp() {
@@ -219,7 +247,8 @@ void tp() {
     set_tr(gdt_krn_seg_sel(TSS_IDX));
     debug("\n TSS was setup \n");
     //print_selectors();
-       
+    pde32_t *pgd_addr = (pde32_t*)0x1000;
+    setup_task_pagination(pgd_addr);
 
 
 
