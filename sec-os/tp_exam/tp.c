@@ -14,8 +14,7 @@
 | 0x30 1000      | User1 page table         |
 | 0x37 0000      | User2 page directory     |
 | 0x37 1000      | User2 page table         |
-
-
+| 0x50 0000      | Shared memory            |
 
 */
 
@@ -47,7 +46,7 @@
 #define USER2_PGD 0x370000
 #define USER2_PTB 0x371000
 #define OFFSET_PTB 0x1000
-#define SHARED_MEM_ADDRS 0x50000
+#define SHARED_MEM_ADDRS 0x500000
 
 
 seg_desc_t my_gdt[GDT_ENTRY_COUNT];
@@ -231,6 +230,6 @@ void tp()
 
     set_cr3(KERNEL_PGD);
     enable_pagination();
-
+    debug("\n >>>>> Tâches effectuées: <<<<<\n -mise en place segmentation et pagination \n -création d'une PGD par tâches et une pour le kernel. \n -mise en place d'un espace mémoire commun aux tâches non testé. \n");
     debug("\n >>>>> end of tp <<<<<\n");
 }
