@@ -7,23 +7,22 @@
 /*| 0x10 0000  | Multiboot Header     |
 | 0x10 0010   |   Kernel stack    |
 | 0x10 2010      | Kernel        |*/
- 
 
 #define KERNEL_STACK_START 0x100010
 #define KERNEL_STACK_SIZE 0x2000
 #define KERNEL_START 0x102010
 #define GDT_ENTRY_COUNT 8
 
-#define RING0_CODE  1
-#define RING0_DATA  2
-#define RING3_CODE  3
-#define RING3_DATA  4
-#define TSS_IDX  5
+#define RING0_CODE 1
+#define RING0_DATA 2
+#define RING3_CODE 3
+#define RING3_DATA 4
+#define TSS_IDX 5
 
-//#define TYPE_DATA_RW SEG_DESC_DATA_RW
-//SEG_DESC_DATA_RW
-//#define TYPE_CODE_RX SEG_DESC_DATA_RX
-//SEG_DESC_CODE_XR
+// #define TYPE_DATA_RW SEG_DESC_DATA_RW
+// SEG_DESC_DATA_RW
+// #define TYPE_CODE_RX SEG_DESC_DATA_RX
+// SEG_DESC_CODE_XR
 #define FLAG_SEGMENT_PRESENT 1
 #define FLAG_DEFAULT_AVL 1
 #define FLAG_DEFAULT_LONGMODE 0
@@ -33,15 +32,25 @@
 #define FLAG_PRIVILEGE_R0 0
 #define FLAG_PRIVILEGE_R3 3
 
+#define KERNEL_PGD 0x200000
+#define KERNEL_PTB 0x201000
+#define USER1_PGD 0x300000
+#define USER1_PTB 0x301000
+#define USER2_PGD 0x370000
+#define USER2_PTB 0x371000
+#define OFFSET_PTB 0x1000
+#define SHARED_MEM_ADDRS 0x50000
+
 
 seg_desc_t my_gdt[GDT_ENTRY_COUNT];
 gdt_reg_t my_gdtr;
-tss_t      TSS;
+tss_t TSS;
 
-void userland() {
-    
-    //Fonction test pour vérifier que le passage en mode userland fonctionne
-    //asm volatile ("mov %eax, %cr0");
+void userland()
+{
+
+    // Fonction test pour vérifier que le passage en mode userland fonctionne
+    // asm volatile ("mov %eax, %cr0");
     debug("\n >>>>> userland <<<<<\n");
 }
 
@@ -52,36 +61,37 @@ Enfin, on va créer une fonction qui va nous permettre de créer une gdt initial
 Dans un premier temps, on se contentera de 3 entrées dans la GDT pour le kernel: une pour le code, une pour les données, et une pour le TSS (TSS qu'on utilisera dans la partie tâches)
 **/
 
-/*On a pas besoin de beaucoups des informations ici. 
+/*On a pas besoin de beaucoups des informations ici.
 On initialise les segments en ring0
 Quels bases et limites donner à ces segments ?
 -> On se met en mode flat donc on commence à 0 et on finit à 0xffffffff
 */
 #define gdt_flat_dsc(_entry, _ring, _type) \
-  {                                        \
-    (_entry)->raw = 0;                     \
-    (_entry)->limit_1 = 0xffff;            \
-    (_entry)->limit_2 = 0xf;               \
-    (_entry)->type = _type;                \
-    (_entry)->dpl = _ring;                 \
-    (_entry)->d = 1;                       \
-    (_entry)->g = 1;                       \
-    (_entry)->s = 1;                       \
-    (_entry)->p = 1;                       \
-  }
+    {                                      \
+        (_entry)->raw = 0;                 \
+        (_entry)->limit_1 = 0xffff;        \
+        (_entry)->limit_2 = 0xf;           \
+        (_entry)->type = _type;            \
+        (_entry)->dpl = _ring;             \
+        (_entry)->d = 1;                   \
+        (_entry)->g = 1;                   \
+        (_entry)->s = 1;                   \
+        (_entry)->p = 1;                   \
+    }
 
-#define tss_dsc(_dSc_,_tSs_)                                            \
-   ({                                                                   \
-      raw32_t addr    = {.raw = _tSs_};                                 \
-      (_dSc_)->raw    = sizeof(tss_t);                                  \
-      (_dSc_)->base_1 = addr.wlow;                                      \
-      (_dSc_)->base_2 = addr._whigh.blow;                               \
-      (_dSc_)->base_3 = addr._whigh.bhigh;                              \
-      (_dSc_)->type   = SEG_DESC_SYS_TSS_AVL_32;                        \
-      (_dSc_)->p      = 1;                                              \
-   })
+#define tss_dsc(_dSc_, _tSs_)                    \
+    ({                                           \
+        raw32_t addr = {.raw = _tSs_};           \
+        (_dSc_)->raw = sizeof(tss_t);            \
+        (_dSc_)->base_1 = addr.wlow;             \
+        (_dSc_)->base_2 = addr._whigh.blow;      \
+        (_dSc_)->base_3 = addr._whigh.bhigh;     \
+        (_dSc_)->type = SEG_DESC_SYS_TSS_AVL_32; \
+        (_dSc_)->p = 1;                          \
+    })
 
-void init_segment(seg_desc_t* seg, uint32_t base, uint32_t limit, uint8_t type, uint8_t s, uint8_t dpl, uint8_t p, uint8_t avl, uint8_t l, uint8_t d, uint8_t g) {
+void init_segment(seg_desc_t *seg, uint32_t base, uint32_t limit, uint8_t type, uint8_t s, uint8_t dpl, uint8_t p, uint8_t avl, uint8_t l, uint8_t d, uint8_t g)
+{
     seg->base_1 = base & 0xFFFF;
     seg->base_2 = (base >> 16) & 0xFF;
     seg->base_3 = (base >> 24) & 0xFF;
@@ -97,28 +107,34 @@ void init_segment(seg_desc_t* seg, uint32_t base, uint32_t limit, uint8_t type, 
     seg->g = g;
 }
 
-void print_selectors(){
+void print_selectors()
+{
     uint16_t ds = get_ds();
-	uint16_t es = get_es();
-	uint16_t fs = get_fs();
-	uint16_t gs = get_gs();
-	debug("ds: 0x%x ", ds);
-	debug("es: 0x%x ", es);
-	debug("fs: 0x%x ", fs);
-	debug("gs: 0x%x ", gs);
+    uint16_t es = get_es();
+    uint16_t fs = get_fs();
+    uint16_t gs = get_gs();
+    debug("ds: 0x%x ", ds);
+    debug("es: 0x%x ", es);
+    debug("fs: 0x%x ", fs);
+    debug("gs: 0x%x ", gs);
 }
 
-void print_gdt_content(gdt_reg_t gdtr_ptr) {
-    seg_desc_t* gdt_ptr;
-    gdt_ptr = (seg_desc_t*)(gdtr_ptr.addr);
-    int i=0;
-    while ((uint32_t)gdt_ptr < ((gdtr_ptr.addr) + gdtr_ptr.limit)) {
-        uint32_t start = gdt_ptr->base_3<<24 | gdt_ptr->base_2<<16 | gdt_ptr->base_1;
+void print_gdt_content(gdt_reg_t gdtr_ptr)
+{
+    seg_desc_t *gdt_ptr;
+    gdt_ptr = (seg_desc_t *)(gdtr_ptr.addr);
+    int i = 0;
+    while ((uint32_t)gdt_ptr < ((gdtr_ptr.addr) + gdtr_ptr.limit))
+    {
+        uint32_t start = gdt_ptr->base_3 << 24 | gdt_ptr->base_2 << 16 | gdt_ptr->base_1;
         uint32_t end;
-        if (gdt_ptr->g) {
-            end = start + ( (gdt_ptr->limit_2<<16 | gdt_ptr->limit_1) <<12) + 4095;
-        } else {
-            end = start + (gdt_ptr->limit_2<<16 | gdt_ptr->limit_1);
+        if (gdt_ptr->g)
+        {
+            end = start + ((gdt_ptr->limit_2 << 16 | gdt_ptr->limit_1) << 12) + 4095;
+        }
+        else
+        {
+            end = start + (gdt_ptr->limit_2 << 16 | gdt_ptr->limit_1);
         }
         debug("%d ", i);
         debug("[0x%x ", start);
@@ -137,7 +153,8 @@ void print_gdt_content(gdt_reg_t gdtr_ptr) {
     }
 }
 
-void init_gdt_segs(){
+void init_gdt_segs()
+{
     // Init GDT
     // First element of the GDT is always empty
     my_gdt[0].raw = 0ULL;
@@ -147,20 +164,20 @@ void init_gdt_segs(){
     // Initialize GDT segments for user code and data segments in flatmode
     init_segment(&my_gdt[3], 0x00, 0xffff, SEG_DESC_CODE_XR, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R3, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
     init_segment(&my_gdt[4], 0x00, 0xffff, SEG_DESC_DATA_RW, FLAG_DEFAULT_DESCRIPTOR_TYPE, FLAG_PRIVILEGE_R3, FLAG_SEGMENT_PRESENT, FLAG_DEFAULT_AVL, FLAG_DEFAULT_LONGMODE, FLAG_DEFAULT_LENGTH, FLAG_DEFAULT_GRANULARITY);
-   
-	// Load the GDT by changing the adress and limit in gdtr
-    gdt_reg_t my_gdtr;  
+
+    // Load the GDT by changing the adress and limit in gdtr
+    gdt_reg_t my_gdtr;
 
     my_gdtr.addr = (long unsigned int)my_gdt;
     my_gdtr.limit = sizeof(my_gdt) - 1;
     set_gdtr(my_gdtr);
-    
-    // Check GDT content    
+
+    // Check GDT content
     get_gdtr(my_gdtr);
-    debug("GDT addr:  0x%x ", (unsigned int) my_gdtr.addr);
+    debug("GDT addr:  0x%x ", (unsigned int)my_gdtr.addr);
     debug("limit: %d\n", my_gdtr.limit);
     print_gdt_content(my_gdtr);
-    
+
     // Init registers on kernel segments
     set_cs(gdt_krn_seg_sel(RING0_CODE));
     set_ss(gdt_krn_seg_sel(RING0_DATA));
@@ -168,90 +185,73 @@ void init_gdt_segs(){
     set_es(gdt_krn_seg_sel(RING0_DATA));
     set_fs(gdt_krn_seg_sel(RING0_DATA));
     set_gs(gdt_krn_seg_sel(RING0_DATA));
-            
+
     print_selectors();
 }
 
+#define tss_dsc(_dSc_, _tSs_)                    \
+    ({                                           \
+        raw32_t addr = {.raw = _tSs_};           \
+        (_dSc_)->raw = sizeof(tss_t);            \
+        (_dSc_)->base_1 = addr.wlow;             \
+        (_dSc_)->base_2 = addr._whigh.blow;      \
+        (_dSc_)->base_3 = addr._whigh.bhigh;     \
+        (_dSc_)->type = SEG_DESC_SYS_TSS_AVL_32; \
+        (_dSc_)->p = 1;                          \
+    })
 
-#define tss_dsc(_dSc_,_tSs_)                                            \
-   ({                                                                   \
-      raw32_t addr    = {.raw = _tSs_};                                 \
-      (_dSc_)->raw    = sizeof(tss_t);                                  \
-      (_dSc_)->base_1 = addr.wlow;                                      \
-      (_dSc_)->base_2 = addr._whigh.blow;                               \
-      (_dSc_)->base_3 = addr._whigh.bhigh;                              \
-      (_dSc_)->type   = SEG_DESC_SYS_TSS_AVL_32;                        \
-      (_dSc_)->p      = 1;                                              \
-   })
-
-
-void setup_task_pagination(pde32_t *pgd) 
+void setup_mem_mapping(pde32_t *pgd, int first_ptb_offset, int task_num)
 {
-  debug("INITIALISATION DE LA PAGINATION\n");
-  memset((void*)pgd, 0, PAGE_SIZE);
+    debug("INITIALISATION DE LA PAGINATION\n");
+    memset((void *)pgd, 0, PAGE_SIZE);
 
-  pte32_t *ptb = (pte32_t *)((int)pgd + 0x1000);
+    pte32_t *ptb = (pte32_t *)((int)pgd + first_ptb_offset);
 
-  // Initalisation des 1024 entrées de la ptb
-  for (int i = 0; i < 1024; i++) {
-    pg_set_entry(&ptb[i], PG_KRN|PG_RW,  i);
-  }
-  debug("PTB[1] = %d\n", ptb[1].raw);
-  // Initialisation de l'entrée de la pgd
-  pg_set_entry(&pgd[0], PG_KRN|PG_RW, page_nr(ptb));
-  debug("PGD = %p\n", pgd);
-
-  // On met à jour CR3
-  set_cr3((uint32_t)pgd);
-  debug("CR3 = %d\n", get_cr3());
-
-  uint32_t cr0 = get_cr0();
-  set_cr0(cr0|CR0_PG);
-  debug("CR0 = %d\n", get_cr0());
-}
-
-void setup_memory_pages(pde32_t *pgd, pte32_t *first_ptb, unsigned int flags)
-{
-  memset(pgd, 0, PAGE_SIZE);
-
-  // Setup identity paging (see https://wiki.osdev.org/Identity_Paging)
-  // From 0x00_0000 to 0x7f_ffff, with 2 page directory entries
-  for (int entry = 0; entry <= 1; entry++)
-  {
-    // ptb address = base address + entry num * page size
-    pte32_t *ptb = first_ptb + entry * 4096;
+    // Initalisation des 1024 entrées de la ptb
+    debug("addrs PTB[0] = %d\n", ptb[0].addr);
     for (int i = 0; i < 1024; i++)
-      pg_set_entry(&ptb[i], flags, i + entry * 1024);
-    // Add the page table to the page directory
-    pg_set_entry(&pgd[entry], flags, page_nr(ptb));
-  }
+    {
+        pg_set_entry(&ptb[i], PG_KRN | PG_RW, i + task_num * 1024);
+    }
+    debug("PTB[1] = %d\n", ptb[1].raw);  
 
-  // Enable paging (see https://wiki.osdev.org/Paging#Enabling)
-  set_cr3(pgd);
+    // Initialisation de l'entrée de la pgd
+    pg_set_entry(&pgd[0], PG_KRN | PG_RW, page_nr(ptb));
+    debug("PGD = %p\n", pgd);
 
-  // Activation de la pagination
-  uint32_t cr0 = get_cr0();
-  set_cr0(cr0 | CR0_PG);
+    // Initialisation de la ptb de la mémoire partagée
+    pte32_t *ptb_shared = (pte32_t *)((int)pgd + first_ptb_offset + 4*1024);
+    pg_set_entry(&ptb_shared[0], PG_KRN | PG_RW, page_nr(SHARED_MEM_ADDRS));
+    pg_set_entry(&pgd[1], PG_KRN | PG_RW, page_nr(ptb_shared));
+    debug("SHARED MEMORY ADDRESS = %d\n", ptb_shared[0].addr);
 }
 
-void tp() {
+void enable_pagination()
+{
+    // On active la pagination
+    uint32_t cr0 = get_cr0();
+    set_cr0(cr0 | CR0_PG);
+}
+
+void tp()
+{
     init_gdt_segs();
-    //Initalize TSS segment
+    // Initalize TSS segment
     set_ds(gdt_krn_seg_sel(RING3_DATA));
     set_es(gdt_krn_seg_sel(RING3_DATA));
     set_fs(gdt_krn_seg_sel(RING3_DATA));
     set_gs(gdt_krn_seg_sel(RING3_DATA));
     TSS.s0.esp = get_ebp();
-    TSS.s0.ss  = gdt_krn_seg_sel(RING0_DATA);
+    TSS.s0.ss = gdt_krn_seg_sel(RING0_DATA);
     tss_dsc(&my_gdt[TSS_IDX], (offset_t)&TSS);
     set_tr(gdt_krn_seg_sel(TSS_IDX));
     debug("\n TSS was setup \n");
-    //print_selectors();
-    pde32_t *pgd_addr = (pde32_t*)0x1000;
-    setup_task_pagination(pgd_addr);
+    // print_selectors();
 
+    setup_mem_mapping((pde32_t *)KERNEL_PGD, OFFSET_PTB, 0);
+    setup_mem_mapping((pde32_t *) USER1_PGD, OFFSET_PTB, 1);
+    setup_mem_mapping((pde32_t *) USER2_PGD, OFFSET_PTB, 2);
 
-
+    //enable_pagination();
     debug("\n >>>>> end of tp <<<<<\n");
 }
-
