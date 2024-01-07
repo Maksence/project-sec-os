@@ -4,9 +4,21 @@
 #include <string.h>
 #include <pagemem.h>
 #include <cr.h>
-/*| 0x10 0000  | Multiboot Header     |
-| 0x10 0010   |   Kernel stack    |
-| 0x10 2010      | Kernel        |*/
+/*
+| 0x10 0000      | Multiboot Header         |
+| 0x10 0010      |   Kernel stack           |
+| 0x10 2010      | Kernel                   |
+| 0x20 0000      | Kernel page directory    |
+| 0x20 1000      | Kernel page table        |
+| 0x30 0000      | User1 page directory     |
+| 0x30 1000      | User1 page table         |
+| 0x37 0000      | User2 page directory     |
+| 0x37 1000      | User2 page table         |
+
+
+
+*/
+
 
 #define KERNEL_STACK_START 0x100010
 #define KERNEL_STACK_SIZE 0x2000
@@ -19,10 +31,6 @@
 #define RING3_DATA 4
 #define TSS_IDX 5
 
-// #define TYPE_DATA_RW SEG_DESC_DATA_RW
-// SEG_DESC_DATA_RW
-// #define TYPE_CODE_RX SEG_DESC_DATA_RX
-// SEG_DESC_CODE_XR
 #define FLAG_SEGMENT_PRESENT 1
 #define FLAG_DEFAULT_AVL 1
 #define FLAG_DEFAULT_LONGMODE 0
@@ -49,46 +57,15 @@ tss_t TSS;
 void userland()
 {
 
-    // Fonction test pour vérifier que le passage en mode userland fonctionne
     // asm volatile ("mov %eax, %cr0");
     debug("\n >>>>> userland <<<<<\n");
 }
 
-/*** Pour l'instant, les fonctions sont prises des corrections du tp
-Dans un premier temps, on définit les variables qui nous seront utiles.
-Ensuite, on va créer une fonction qui va nous permettre de gérer des segments de codes, et de les initialiser.
-Enfin, on va créer une fonction qui va nous permettre de créer une gdt initialement, et d'instancier des segments en son sein.
-Dans un premier temps, on se contentera de 3 entrées dans la GDT pour le kernel: une pour le code, une pour les données, et une pour le TSS (TSS qu'on utilisera dans la partie tâches)
-**/
 
-/*On a pas besoin de beaucoups des informations ici.
+/*
 On initialise les segments en ring0
-Quels bases et limites donner à ces segments ?
 -> On se met en mode flat donc on commence à 0 et on finit à 0xffffffff
 */
-#define gdt_flat_dsc(_entry, _ring, _type) \
-    {                                      \
-        (_entry)->raw = 0;                 \
-        (_entry)->limit_1 = 0xffff;        \
-        (_entry)->limit_2 = 0xf;           \
-        (_entry)->type = _type;            \
-        (_entry)->dpl = _ring;             \
-        (_entry)->d = 1;                   \
-        (_entry)->g = 1;                   \
-        (_entry)->s = 1;                   \
-        (_entry)->p = 1;                   \
-    }
-
-#define tss_dsc(_dSc_, _tSs_)                    \
-    ({                                           \
-        raw32_t addr = {.raw = _tSs_};           \
-        (_dSc_)->raw = sizeof(tss_t);            \
-        (_dSc_)->base_1 = addr.wlow;             \
-        (_dSc_)->base_2 = addr._whigh.blow;      \
-        (_dSc_)->base_3 = addr._whigh.bhigh;     \
-        (_dSc_)->type = SEG_DESC_SYS_TSS_AVL_32; \
-        (_dSc_)->p = 1;                          \
-    })
 
 void init_segment(seg_desc_t *seg, uint32_t base, uint32_t limit, uint8_t type, uint8_t s, uint8_t dpl, uint8_t p, uint8_t avl, uint8_t l, uint8_t d, uint8_t g)
 {
@@ -207,7 +184,7 @@ void setup_mem_mapping(pde32_t *pgd, int first_ptb_offset, int task_num)
 
     pte32_t *ptb = (pte32_t *)((int)pgd + first_ptb_offset);
 
-    // Initalisation des 1024 entrées de la ptb
+    // Initialize the first 1024 entries of the page table
     debug("addrs PTB[0] = %d\n", ptb[0].addr);
     for (int i = 0; i < 1024; i++)
     {
@@ -215,11 +192,11 @@ void setup_mem_mapping(pde32_t *pgd, int first_ptb_offset, int task_num)
     }
     debug("PTB[1] = %d\n", ptb[1].raw);  
 
-    // Initialisation de l'entrée de la pgd
+    // Initialize the first entry of the page directory
     pg_set_entry(&pgd[0], PG_KRN | PG_RW, page_nr(ptb));
     debug("PGD = %p\n", pgd);
 
-    // Initialisation de la ptb de la mémoire partagée
+    // Initialize the first entry of the shared page table
     pte32_t *ptb_shared = (pte32_t *)((int)pgd + first_ptb_offset + 4*1024);
     pg_set_entry(&ptb_shared[0], PG_KRN | PG_RW, page_nr(SHARED_MEM_ADDRS));
     pg_set_entry(&pgd[1], PG_KRN | PG_RW, page_nr(ptb_shared));
@@ -228,7 +205,7 @@ void setup_mem_mapping(pde32_t *pgd, int first_ptb_offset, int task_num)
 
 void enable_pagination()
 {
-    // On active la pagination
+    // Enabling paging
     uint32_t cr0 = get_cr0();
     set_cr0(cr0 | CR0_PG);
 }
@@ -246,13 +223,14 @@ void tp()
     tss_dsc(&my_gdt[TSS_IDX], (offset_t)&TSS);
     set_tr(gdt_krn_seg_sel(TSS_IDX));
     debug("\n TSS was setup \n");
-    // print_selectors();
-
+    
+    // Initialize page tables for paging
     setup_mem_mapping((pde32_t *)KERNEL_PGD, OFFSET_PTB, 0);
     setup_mem_mapping((pde32_t *) USER1_PGD, OFFSET_PTB, 1);
     setup_mem_mapping((pde32_t *) USER2_PGD, OFFSET_PTB, 2);
 
     set_cr3(KERNEL_PGD);
     enable_pagination();
+
     debug("\n >>>>> end of tp <<<<<\n");
 }
