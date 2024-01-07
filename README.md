@@ -1,5 +1,4 @@
 | Adress     | Content   |
-
 | 0x10 0000      | Multiboot Header         |
 | 0x10 0010      | Kernel stack             |
 | 0x10 2010      | Kernel                   |
