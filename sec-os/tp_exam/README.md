@@ -32,9 +32,9 @@ Permettre un ordonnancement préemptif de 2 tâches (T1 et T2) en ring 3 :
    + Les tâches ont une zone de mémoire partagée : OK
      - De la taille d'une page (4KB) OK
      - À l'adresse physique de votre choix OK
-     - À des adresses virtuelles différentes ?
+     - À des adresses virtuelles différentes OK
    + Les tâches doivent avoir leur propre pile noyau (4KB) 
-   + Les tâches doivent avoir leur propre pile utilisateur (4KB) ?
+   + Les tâches doivent avoir leur propre pile utilisateur (4KB) 
  - La tâche 1 écrit un compteur (uint32_t) dans la zone de mémoire partagée NOK
  - La tâche 2 affiche le compteur depuis la zone de mémoire partagée NOK
  - L'affichage dans la tâche 2 s'effectuera à l'aide d'un appel système :NOK

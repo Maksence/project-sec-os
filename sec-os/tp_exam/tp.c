@@ -14,7 +14,6 @@
 | 0x30 1000      | User1 page table         |
 | 0x37 0000      | User2 page directory     |
 | 0x37 1000      | User2 page table         |
-| 0x50 0000      | Shared memory            |
 */
 
 
