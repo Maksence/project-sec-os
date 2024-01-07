@@ -40,7 +40,7 @@ Permettre un ordonnancement préemptif de 2 tâches (T1 et T2) en ring 3 :
  - L'affichage dans la tâche 2 s'effectuera à l'aide d'un appel système :NOK
    + L'interface utilisateur :
      - A le prototype: `void sys_counter(uint32_t *counter);`
-     - Notez bien que l'argument est une adresse virtuelle ring 3
+     - Notez bien que l'argument est une adresse virtuelle ring 3²
    + L'interface noyau :
      - Est installée à l'interruption `0x80`
      - Reçoit un pointeur utilisateur de type `uint32_t*`
