@@ -15,7 +15,6 @@
 | 0x37 0000      | User2 page directory     |
 | 0x37 1000      | User2 page table         |
 | 0x50 0000      | Shared memory            |
-
 */
 
 
@@ -60,6 +59,17 @@ void userland()
     debug("\n >>>>> userland <<<<<\n");
 }
 
+void user1(){
+    while(1){
+        debug("\n >>>>> user1 <<<<<\n");
+    }
+}
+
+void user2(){
+    while(1){
+        debug("\n >>>>> user2 <<<<<\n");
+    }
+}
 
 /*
 On initialise les segments en ring0
