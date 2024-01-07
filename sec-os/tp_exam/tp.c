@@ -252,6 +252,7 @@ void tp()
     setup_mem_mapping((pde32_t *) USER1_PGD, OFFSET_PTB, 1);
     setup_mem_mapping((pde32_t *) USER2_PGD, OFFSET_PTB, 2);
 
-    //enable_pagination();
+    set_cr3(KERNEL_PGD);
+    enable_pagination();
     debug("\n >>>>> end of tp <<<<<\n");
 }
